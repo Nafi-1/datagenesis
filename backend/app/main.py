@@ -39,14 +39,17 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://127.0.0.1:5173",
-        "https://127.0.0.1:5173",
         "http://localhost:5173",
         "https://localhost:5173", 
+        "http://127.0.0.1:5173",
+        "https://127.0.0.1:5173",
         "http://localhost:3000",
         "https://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://127.0.0.1:3000",
         "https://*.vercel.app",
-        "https://*.netlify.app"
+        "https://*.netlify.app",
+        "*"  # Allow all origins for development - remove in production
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -151,7 +154,7 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat(),
         "version": "1.0.0",
         "environment": "development",
-        "host": f"{request.url.hostname}:{request.url.port}" if hasattr(request, 'url') else "127.0.0.1:8000",
+        "host": "localhost:8000",
         "services": {}
     }
     
@@ -228,7 +231,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
-        host="127.0.0.1",
+        host="0.0.0.0",  # Listen on all interfaces
         port=8000,
         reload=True,
         log_level="info"

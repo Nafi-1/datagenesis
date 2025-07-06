@@ -179,11 +179,11 @@ def start_fastapi_server():
     print(f"{Colors.OKCYAN}► Starting FastAPI server...{Colors.ENDC}")
     
     # Choose host and port
-    host = "127.0.0.1"
+    host = "0.0.0.0"  # Listen on all interfaces  
     port = 8000
     
     # Check if port is available
-    if not check_port_available(host, port):
+    if not check_port_available("127.0.0.1", port):  # Check localhost specifically
         print(f"{Colors.FAIL}✗ Port {port} is already in use{Colors.ENDC}")
         print(f"{Colors.WARNING}Please stop any other processes using port {port} or change the port{Colors.ENDC}")
         return False
@@ -194,13 +194,13 @@ def start_fastapi_server():
             'uvicorn',
             'app.main:app',
             '--reload',
-            '--host', host,
+            '--host', '0.0.0.0',  # Listen on all interfaces
             '--port', str(port),
             '--log-level', 'info'
         ]
         
         print(f"{Colors.OKBLUE}Command: {' '.join(cmd)}{Colors.ENDC}")
-        print(f"{Colors.OKBLUE}Starting server on {host}:{port}...{Colors.ENDC}")
+        print(f"{Colors.OKBLUE}Starting server on 0.0.0.0:{port} (accessible via localhost:{port})...{Colors.ENDC}")
         
         # Start the server
         process = subprocess.Popen(
@@ -223,10 +223,10 @@ def start_fastapi_server():
             return False
         
         # Wait for the server to be ready
-        if wait_for_server(host, port, timeout=15):
+        if wait_for_server("localhost", port, timeout=15):  # Check localhost connectivity
             # Test health endpoint
-            if test_health_endpoint(host, port):
-                print_server_info(host, port)
+            if test_health_endpoint("localhost", port):
+                print_server_info("localhost", port)
                 
                 # Keep the server running
                 try:

@@ -57,8 +57,8 @@ const DataGenerator: React.FC = () => {
   // Check backend health on component mount
   useEffect(() => {
     checkBackendHealth();
-    // Check health every 10 seconds for faster updates
-    const healthInterval = setInterval(checkBackendHealth, 10000);
+    // Check health every 30 seconds to avoid spam
+    const healthInterval = setInterval(checkBackendHealth, 30000);
     return () => clearInterval(healthInterval);
   }, []);
 
