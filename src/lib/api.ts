@@ -217,19 +217,19 @@ export class ApiService {
   // Local data generation for guests with backend attempt first
   static async generateLocalData(config: any) {
     try {
-      console.log('🎯 Attempting local generation with config:', config);
+      console.log('🎯 Attempting backend generation with config:', config);
       
-      // First try backend even for guests
+      // Always try backend first
       try {
         const response = await api.post('/generation/generate-local', config);
-        console.log('✅ Backend local generation successful:', response.data);
+        console.log('✅ Backend generation successful:', response.data);
         return response.data;
       } catch (backendError) {
-        console.log('⚠️ Backend unavailable for local generation, this will use frontend fallback');
+        console.log('⚠️ Backend generation failed, falling back to local generation:', backendError.message);
         throw backendError;
       }
     } catch (error) {
-      console.error('❌ Local generation API request failed:', error);
+      console.error('❌ Backend generation failed:', error);
       throw error;
     }
   }

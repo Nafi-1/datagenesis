@@ -396,15 +396,24 @@ export class DataGeneratorService {
     try {
       console.log('🎯 Starting synthetic dataset generation with config:', config);
       
-      // For guests and authenticated users, try backend first
+      // Always try backend first with proper config
       try {
-        console.log('🔗 Attempting backend generation...');
-        const result = await ApiService.generateLocalData(config);
+        console.log('🔗 Attempting backend generation with enhanced config...');
+        
+        // Enhance config with proper structure
+        const enhancedConfig = {
+          ...config,
+          sourceData: config.sourceData || [],
+          description: config.description || '',
+          schema: config.schema || {}
+        };
+        
+        const result = await ApiService.generateLocalData(enhancedConfig);
         console.log('✅ Backend generation successful:', result);
         return result;
       } catch (backendError) {
-        console.log('⚠️ Backend generation failed, using local fallback:', backendError.message);
-        toast.error('Backend unavailable. Using local AI generation.', { duration: 3000 });
+        console.log('⚠️ Backend generation failed, using local fallback:', (backendError as any)?.message);
+        toast.error('Backend temporarily unavailable. Using local AI generation.', { duration: 3000 });
         
         // Continue with local generation below
       }
