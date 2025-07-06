@@ -12,6 +12,7 @@ import time
 import platform
 import signal
 from pathlib import Path
+import socket
 
 class Colors:
     HEADER = '\033[95m'
@@ -35,6 +36,65 @@ def print_banner():
 {Colors.ENDC}
 """
     print(banner)
+
+def check_port_available(host, port):
+    """Check if a port is available for binding"""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        return result != 0  # Port is available if connection fails
+    except Exception:
+        return False
+
+def wait_for_server(host, port, timeout=30):
+    """Wait for server to be ready on specified host and port"""
+    print(f"{Colors.OKCYAN}► Waiting for server to be ready on {host}:{port}...{Colors.ENDC}")
+    
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex((host, port))
+            sock.close()
+            
+            if result == 0:
+                print(f"{Colors.OKGREEN}✓ Server is ready and accepting connections!{Colors.ENDC}")
+                return True
+        except Exception:
+            pass
+        
+        time.sleep(0.5)
+    
+    print(f"{Colors.FAIL}✗ Server failed to start within {timeout} seconds{Colors.ENDC}")
+    return False
+
+def test_health_endpoint(host, port):
+    """Test the health endpoint to ensure API is responding"""
+    import urllib.request
+    import urllib.error
+    
+    health_url = f"http://{host}:{port}/api/health"
+    
+    try:
+        print(f"{Colors.OKCYAN}► Testing health endpoint: {health_url}{Colors.ENDC}")
+        
+        with urllib.request.urlopen(health_url, timeout=5) as response:
+            if response.status == 200:
+                print(f"{Colors.OKGREEN}✓ Health endpoint responding correctly{Colors.ENDC}")
+                return True
+            else:
+                print(f"{Colors.WARNING}⚠ Health endpoint returned status {response.status}{Colors.ENDC}")
+                return False
+                
+    except urllib.error.URLError as e:
+        print(f"{Colors.FAIL}✗ Health endpoint test failed: {e}{Colors.ENDC}")
+        return False
+    except Exception as e:
+        print(f"{Colors.FAIL}✗ Unexpected error testing health endpoint: {e}{Colors.ENDC}")
+        return False
 
 def check_environment():
     """Check if environment is properly configured."""
@@ -118,18 +178,29 @@ def start_fastapi_server():
     """Start the FastAPI server."""
     print(f"{Colors.OKCYAN}► Starting FastAPI server...{Colors.ENDC}")
     
+    # Choose host and port
+    host = "127.0.0.1"
+    port = 8000
+    
+    # Check if port is available
+    if not check_port_available(host, port):
+        print(f"{Colors.FAIL}✗ Port {port} is already in use{Colors.ENDC}")
+        print(f"{Colors.WARNING}Please stop any other processes using port {port} or change the port{Colors.ENDC}")
+        return False
+    
     try:
         # Use uvicorn to run the FastAPI app
         cmd = [
             'uvicorn',
             'app.main:app',
             '--reload',
-            '--host', '127.0.0.1',
-            '--port', '8000',
+            '--host', host,
+            '--port', str(port),
             '--log-level', 'info'
         ]
         
         print(f"{Colors.OKBLUE}Command: {' '.join(cmd)}{Colors.ENDC}")
+        print(f"{Colors.OKBLUE}Starting server on {host}:{port}...{Colors.ENDC}")
         
         # Start the server
         process = subprocess.Popen(
@@ -140,31 +211,53 @@ def start_fastapi_server():
             bufsize=1
         )
         
-        # Monitor the output
-        print(f"{Colors.OKCYAN}► FastAPI server starting...{Colors.ENDC}")
+        # Wait a moment for the server to start
+        time.sleep(2)
         
-        for line in iter(process.stdout.readline, ''):
-            if line:
-                print(f"{Colors.OKBLUE}[FastAPI]{Colors.ENDC} {line.strip()}")
+        # Check if process is still running
+        if process.poll() is not None:
+            # Process has terminated
+            output, _ = process.communicate()
+            print(f"{Colors.FAIL}✗ Server failed to start:{Colors.ENDC}")
+            print(output)
+            return False
+        
+        # Wait for the server to be ready
+        if wait_for_server(host, port, timeout=15):
+            # Test health endpoint
+            if test_health_endpoint(host, port):
+                print_server_info(host, port)
                 
-                # Check for server ready signals
-                if "Uvicorn running on" in line:
-                    print(f"{Colors.OKGREEN}✓ FastAPI server is ready!{Colors.ENDC}")
-                    break
-                elif "Application startup complete" in line:
-                    print(f"{Colors.OKGREEN}✓ Application startup complete!{Colors.ENDC}")
-                elif "Error" in line or "Failed" in line:
-                    print(f"{Colors.FAIL}✗ Server startup error detected{Colors.ENDC}")
-        
-        # Keep the process running
-        try:
-            process.wait()
-        except KeyboardInterrupt:
-            print(f"\n{Colors.WARNING}Shutting down FastAPI server...{Colors.ENDC}")
+                # Keep the server running
+                try:
+                    print(f"{Colors.OKCYAN}► Server is running. Press Ctrl+C to stop...{Colors.ENDC}")
+                    
+                    # Monitor server output in a separate thread if needed
+                    while True:
+                        if process.poll() is not None:
+                            print(f"{Colors.FAIL}✗ Server process terminated unexpectedly{Colors.ENDC}")
+                            break
+                        time.sleep(1)
+                        
+                except KeyboardInterrupt:
+                    print(f"\n{Colors.WARNING}Shutting down FastAPI server...{Colors.ENDC}")
+                    process.terminate()
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                    print(f"{Colors.OKGREEN}✓ Server shutdown complete{Colors.ENDC}")
+                
+                return True
+            else:
+                print(f"{Colors.FAIL}✗ Server started but health check failed{Colors.ENDC}")
+                process.terminate()
+                return False
+        else:
+            print(f"{Colors.FAIL}✗ Server failed to become ready{Colors.ENDC}")
             process.terminate()
-            process.wait()
-        
-        return process.returncode == 0
+            return False
         
     except FileNotFoundError:
         print(f"{Colors.FAIL}✗ uvicorn command not found{Colors.ENDC}")
@@ -174,7 +267,7 @@ def start_fastapi_server():
         print(f"{Colors.FAIL}✗ Failed to start FastAPI server: {e}{Colors.ENDC}")
         return False
 
-def print_server_info():
+def print_server_info(host, port):
     """Print server information."""
     print(f"""
 {Colors.HEADER}
@@ -184,10 +277,10 @@ def print_server_info():
 {Colors.ENDC}
 
 {Colors.BOLD}Server URLs:{Colors.ENDC}
-{Colors.OKGREEN}Backend API:{Colors.ENDC}      http://localhost:8000/api
-{Colors.OKGREEN}API Documentation:{Colors.ENDC} http://localhost:8000/api/docs
-{Colors.OKGREEN}Health Check:{Colors.ENDC}     http://localhost:8000/api/health
-{Colors.OKGREEN}WebSocket:{Colors.ENDC}        ws://localhost:8000/ws/{{client_id}}
+{Colors.OKGREEN}Backend API:{Colors.ENDC}      http://{host}:{port}/api
+{Colors.OKGREEN}API Documentation:{Colors.ENDC} http://{host}:{port}/api/docs
+{Colors.OKGREEN}Health Check:{Colors.ENDC}     http://{host}:{port}/api/health
+{Colors.OKGREEN}WebSocket:{Colors.ENDC}        ws://{host}:{port}/ws/{{client_id}}
 
 {Colors.BOLD}Frontend Communication:{Colors.ENDC}
 {Colors.OKGREEN}Frontend URL:{Colors.ENDC}     http://localhost:5173
@@ -230,9 +323,6 @@ def main():
     
     # Check Redis (optional)
     start_redis_server()
-    
-    # Print server info
-    print_server_info()
     
     # Start FastAPI server
     success = start_fastapi_server()

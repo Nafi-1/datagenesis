@@ -53,6 +53,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add preflight OPTIONS handler
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    """Handle preflight OPTIONS requests"""
+    return {}
+
 # Optional authentication - allow unauthenticated access for guest users
 from fastapi.security import HTTPBearer
 from fastapi import Request, HTTPException
@@ -123,6 +129,17 @@ async def log_requests(request: Request, call_next):
     
     return response
 
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "DataGenesis AI Backend",
+        "version": "1.0.0",
+        "status": "running",
+        "api_docs": "/api/docs",
+        "health": "/api/health"
+    }
+
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
@@ -134,7 +151,7 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat(),
         "version": "1.0.0",
         "environment": "development",
-        "host": "127.0.0.1:8000",
+        "host": f"{request.url.hostname}:{request.url.port}" if hasattr(request, 'url') else "127.0.0.1:8000",
         "services": {}
     }
     

@@ -16,7 +16,7 @@ const getBackendUrl = () => {
 // Create axios instance with dynamic base URL
 const api = axios.create({
   baseURL: getBackendUrl(),
-  timeout: 10000, // Reduce timeout for faster feedback
+  timeout: 15000, // Increase timeout to allow backend to start
   headers: {
     'Content-Type': 'application/json',
   },
@@ -61,7 +61,8 @@ api.interceptors.response.use(
       localStorage.removeItem('auth_token');
       useStore.getState().setUser(null);
     } else if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-      console.error('🔌 Backend connection refused - server may be offline');
+      console.error('🔌 Backend connection refused - Please ensure backend is running on http://127.0.0.1:8000');
+      console.error('💡 Try running: cd backend && python run.py');
     }
     return Promise.reject(error);
   }
@@ -73,9 +74,7 @@ export class ApiService {
     try {
       console.log('🔍 Checking backend health...');
       // Try direct connection first, then proxy
-      const healthUrls = import.meta.env.DEV 
-        ? ['http://127.0.0.1:8000/api/health', '/api/health']
-        : ['/api/health'];
+      const healthUrls = ['/api/health'];
       
       let lastError;
       for (const healthUrl of healthUrls) {
@@ -86,7 +85,7 @@ export class ApiService {
         headers: {
           'Content-Type': 'application/json',
         },
-            signal: AbortSignal.timeout(3000)
+            signal: AbortSignal.timeout(5000)
       });
       
       if (!response.ok) {
@@ -97,7 +96,8 @@ export class ApiService {
           console.log(`💚 Backend is healthy via ${healthUrl}:`, data);
       return { healthy: true, data };
         } catch (error) {
-          console.log(`❌ Health check failed for ${healthUrl}:`, error.message);
+          const errorMessage = (error && typeof error === 'object' && 'message' in error) ? (error as any).message : error;
+          console.log(`❌ Health check failed for ${healthUrl}:`, errorMessage);
           lastError = error;
           continue;
         }
@@ -105,8 +105,9 @@ export class ApiService {
       
       throw lastError || new Error('All health check URLs failed');
     } catch (error) {
-      console.error('💔 Backend health check failed:', error);
-      return { healthy: false, error: error.message || 'Connection failed' };
+      const errorMessage = (error instanceof Error) ? error.message : (typeof error === 'object' && error && 'message' in error) ? (error as any).message : String(error);
+      console.error('💔 Backend health check failed:', errorMessage);
+      return { healthy: false, error: errorMessage || 'Connection failed' };
     }
   }
 
@@ -178,17 +179,25 @@ export class ApiService {
       console.error('❌ Schema generation failed:', error);
       
       // Provide specific error messages
-      if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
-        throw new Error('Backend service is not running. Please start the backend server.');
-      } else if (error.response?.status === 404) {
-        throw new Error('Schema generation endpoint not found. Please check backend configuration.');
-      } else if (error.response?.status >= 500) {
-        throw new Error('Backend server error. Please check server logs.');
-      } else if (error.message.includes('Backend unavailable')) {
-        throw error; // Re-throw our custom error
+      // Narrow error type before property access
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        ('code' in error || 'message' in error)
+      ) {
+        const err = error as { code?: string; message?: string; response?: any };
+        if (err.code === 'ECONNREFUSED' || err.message?.includes('Network Error')) {
+          throw new Error('Backend service is not running. Please start the backend server.');
+        } else if (err.response?.status === 404) {
+          throw new Error('Schema generation endpoint not found. Please check backend configuration.');
+        } else if (err.response?.status >= 500) {
+          throw new Error('Backend server error. Please check server logs.');
+        } else if (err.message?.includes('Backend unavailable')) {
+          throw error; // Re-throw our custom error
+        }
+        throw new Error(`Schema generation failed: ${err.message}`);
       }
-      
-      throw new Error(`Schema generation failed: ${error.message}`);
+      throw new Error('Schema generation failed: Unknown error');
     }
   }
 

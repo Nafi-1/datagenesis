@@ -57,8 +57,8 @@ const DataGenerator: React.FC = () => {
   // Check backend health on component mount
   useEffect(() => {
     checkBackendHealth();
-    // Check health every 15 seconds for faster updates
-    const healthInterval = setInterval(checkBackendHealth, 15000);
+    // Check health every 10 seconds for faster updates
+    const healthInterval = setInterval(checkBackendHealth, 10000);
     return () => clearInterval(healthInterval);
   }, []);
 
@@ -75,7 +75,7 @@ const DataGenerator: React.FC = () => {
         console.log('💔 Backend is unhealthy:', health.error);
       }
     } catch (error) {
-      console.log('💔 Backend health check failed:', error.message || error);
+      console.log('💔 Backend health check failed:', (error as any)?.message || error);
       setBackendHealthy(false);
       setLastHealthCheck(new Date());
     }
