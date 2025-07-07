@@ -14,7 +14,7 @@ const getBackendUrl = () => {
 // Create axios instance with dynamic base URL
 const api = axios.create({
   baseURL: getBackendUrl(),
-  timeout: 60000, // Increased timeout for AI operations
+  timeout: 10000, // Reduced timeout for health checks
   headers: {
     'Content-Type': 'application/json',
   },
@@ -33,19 +33,12 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer guest-access`;
   }
   
-  console.log(`🔗 API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`, {
-    headers: config.headers,
-    timeout: config.timeout
-  });
   return config;
 });
 
 // Add response interceptor for error handling
 api.interceptors.response.use(
   (response) => {
-    console.log(`✅ API Response: ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-      data: response.data
-    });
     return response;
   },
   (error) => {
@@ -53,24 +46,12 @@ api.interceptors.response.use(
     const method = error.config?.method?.toUpperCase() || 'UNKNOWN';
     const url = error.config?.url || 'unknown';
     
-    console.error(`❌ API Error: ${status} ${method} ${url}`, {
-      message: error.message,
-      code: error.code,
-      response: error.response?.data,
-      config: {
-        baseURL: error.config?.baseURL,
-        timeout: error.config?.timeout,
-        headers: error.config?.headers
-      }
-    });
+    console.error(`❌ API Error: ${status} ${method} ${url}: ${error.message}`);
     
     if (error.response?.status === 401) {
       // Clear auth state on 401
       localStorage.removeItem('auth_token');
       useStore.getState().setUser(null);
-    } else if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-      console.error('🔌 Backend connection refused - Please ensure backend is running on http://127.0.0.1:8000');
-      console.error('💡 Try running: cd backend && python run.py');
     }
     return Promise.reject(error);
   }
@@ -80,31 +61,30 @@ export class ApiService {
   // Health check to verify backend connectivity
   static async healthCheck() {
     try {
-      console.log('🔍 Checking backend health...');
+      console.log('🔍 Health check starting...');
       
-      const response = await fetch('/api/health', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(15000) // 15 second timeout
-      });
+      // Use axios for consistency with other API calls
+      const response = await api.get('/health');
       
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (response.status === 200 && response.data) {
+        console.log('💚 Backend is healthy:', response.data.message);
+        return { healthy: true, data: response.data };
+      } else {
+        throw new Error(`Invalid response: ${response.status}`);
       }
-      
-      const data = await response.json();
-      console.log(`💚 Backend is healthy:`, data);
-      return { healthy: true, data };
         
     } catch (error) {
-      const errorMessage = (error instanceof Error) ? error.message : (typeof error === 'object' && error && 'message' in error) ? (error as any).message : String(error);
-      console.error('💔 Backend health check failed:', errorMessage, {
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent
-      });
-      return { healthy: false, error: errorMessage || 'Connection failed' };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('💔 Backend health check failed:', errorMessage);
+      
+      // Check specific error types
+      if (errorMessage.includes('Network Error') || errorMessage.includes('ERR_NETWORK')) {
+        return { healthy: false, error: 'Backend server not running' };
+      } else if (errorMessage.includes('timeout')) {
+        return { healthy: false, error: 'Backend timeout - server slow' };
+      } else {
+        return { healthy: false, error: 'Connection failed' };
+      }
     }
   }
 

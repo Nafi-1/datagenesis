@@ -59,25 +59,24 @@ const DataGenerator: React.FC = () => {
   // Check backend health on component mount
   useEffect(() => {
     checkBackendHealth();
-    // Check health every 30 seconds to avoid spam
-    const healthInterval = setInterval(checkBackendHealth, 30000);
+    // Check health every 15 seconds
+    const healthInterval = setInterval(checkBackendHealth, 15000);
     return () => clearInterval(healthInterval);
   }, []);
 
   const checkBackendHealth = async () => {
     try {
-      console.log('🔍 Checking backend health...');
       const health = await ApiService.healthCheck();
       setBackendHealthy(health.healthy);
       setLastHealthCheck(new Date());
       
       if (health.healthy) {
-        console.log('💚 Backend is healthy');
+        console.log('💚 Backend connected successfully');
       } else {
-        console.log('💔 Backend is unhealthy:', health.error);
+        console.log('💔 Backend connection failed:', health.error);
       }
     } catch (error) {
-      console.log('💔 Backend health check failed:', (error as any)?.message || error);
+      console.error('💔 Health check error:', error);
       setBackendHealthy(false);
       setLastHealthCheck(new Date());
     }

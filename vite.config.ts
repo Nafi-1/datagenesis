@@ -16,19 +16,19 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',  // Match backend exactly
         changeOrigin: true,
         secure: false,
-        timeout: 30000,
-        proxyTimeout: 30000,
+        timeout: 10000,
+        proxyTimeout: 10000,
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
-            console.log('🔴 Proxy error:', err.message);
-            console.log('🔧 Make sure backend is running on http://127.0.0.1:8000');
+            console.error('🔴 Proxy error:', err.message);
           });
           proxy.on('proxyReq', (proxyReq, req, _res) => {
-            console.log('📤 Sending to backend:', req.method, req.url);
-            console.log('📤 Target:', `http://127.0.0.1:8000${req.url}`);
+            console.log('📤 API call:', req.method, req.url);
           });
           proxy.on('proxyRes', (proxyRes, req, _res) => {
-            console.log('📥 Backend response:', proxyRes.statusCode, req.url);
+            if (proxyRes.statusCode !== 200) {
+              console.error('📥 Backend error:', proxyRes.statusCode, req.url);
+            }
           });
         },
       }
