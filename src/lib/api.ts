@@ -7,19 +7,14 @@ let globalWebSocket: WebSocket | null = null;
 
 // Determine backend URL based on environment
 const getBackendUrl = () => {
-  // In development, try direct connection first, then fall back to proxy
-  if (import.meta.env.DEV) {
-    // Use proxy for better development experience
-    return '/api';
-  }
-  // For production, use relative path
+  // Always use proxy for better development experience
   return '/api';
 };
 
 // Create axios instance with dynamic base URL
 const api = axios.create({
   baseURL: getBackendUrl(),
-  timeout: 30000, // Increase timeout further
+  timeout: 60000, // Increased timeout for AI operations
   headers: {
     'Content-Type': 'application/json',
   },
@@ -74,7 +69,7 @@ api.interceptors.response.use(
       localStorage.removeItem('auth_token');
       useStore.getState().setUser(null);
     } else if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-      console.error('🔌 Backend connection refused - Please ensure backend is running on http://localhost:8000');
+      console.error('🔌 Backend connection refused - Please ensure backend is running on http://127.0.0.1:8000');
       console.error('💡 Try running: cd backend && python run.py');
     }
     return Promise.reject(error);
@@ -86,37 +81,23 @@ export class ApiService {
   static async healthCheck() {
     try {
       console.log('🔍 Checking backend health...');
-      // Use the configured proxy
-      const healthUrls = ['/api/health', 'http://localhost:8000/api/health'];
       
-      let lastError;
-      for (const healthUrl of healthUrls) {
-        try {
-          console.log(`🔍 Trying health check URL: ${healthUrl}`);
-          const response = await fetch(healthUrl, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            signal: AbortSignal.timeout(10000) // Increased timeout
-          });
-          
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-          
-          const data = await response.json();
-          console.log(`💚 Backend is healthy via ${healthUrl}:`, data);
-          return { healthy: true, data };
-        } catch (error) {
-          const errorMessage = (error && typeof error === 'object' && 'message' in error) ? (error as any).message : error;
-          console.log(`❌ Health check failed for ${healthUrl}:`, errorMessage);
-          lastError = error;
-          continue;
-        }
+      const response = await fetch('/api/health', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(15000) // 15 second timeout
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      throw lastError || new Error('All health check URLs failed');
+      const data = await response.json();
+      console.log(`💚 Backend is healthy:`, data);
+      return { healthy: true, data };
+        
     } catch (error) {
       const errorMessage = (error instanceof Error) ? error.message : (typeof error === 'object' && error && 'message' in error) ? (error as any).message : String(error);
       console.error('💔 Backend health check failed:', errorMessage, {
@@ -181,7 +162,7 @@ export class ApiService {
       if (!globalWebSocket || globalWebSocket.readyState !== WebSocket.OPEN) {
         try {
           const clientId = useStore.getState().user?.id || 'guest_user';
-          globalWebSocket = new WebSocket(`ws://localhost:8000/ws/${clientId}`);
+          globalWebSocket = new WebSocket(`ws://127.0.0.1:8000/ws/${clientId}`);
           
           globalWebSocket.onmessage = (event) => {
             try {

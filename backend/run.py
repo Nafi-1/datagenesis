@@ -79,15 +79,16 @@ def start_fastapi_server():
         os.chdir(backend_dir)
         
         print(f"{Colors.OKBLUE}Working directory: {os.getcwd()}{Colors.ENDC}")
-        print(f"{Colors.OKBLUE}Starting server on 0.0.0.0:8000...{Colors.ENDC}")
+        print(f"{Colors.OKBLUE}Starting server on 127.0.0.1:8000...{Colors.ENDC}")
         
         # Print server info before starting
         print_server_info()
         
         # Start uvicorn server directly (this will block)
+        # CRITICAL: Use 127.0.0.1 to match proxy configuration
         uvicorn.run(
             "app.main:app",
-            host="0.0.0.0",
+            host="127.0.0.1",  # Match frontend proxy exactly
             port=8000,
             reload=True,
             log_level="info",
@@ -112,18 +113,18 @@ def print_server_info():
 {Colors.ENDC}
 
 {Colors.BOLD}Server URLs:{Colors.ENDC}
-{Colors.OKGREEN}Backend API:{Colors.ENDC}      http://localhost:8000/api
-{Colors.OKGREEN}API Documentation:{Colors.ENDC} http://localhost:8000/api/docs  
-{Colors.OKGREEN}Health Check:{Colors.ENDC}     http://localhost:8000/api/health
-{Colors.OKGREEN}WebSocket:{Colors.ENDC}        ws://localhost:8000/ws/{{client_id}}
+{Colors.OKGREEN}Backend API:{Colors.ENDC}      http://127.0.0.1:8000/api
+{Colors.OKGREEN}API Documentation:{Colors.ENDC} http://127.0.0.1:8000/api/docs  
+{Colors.OKGREEN}Health Check:{Colors.ENDC}     http://127.0.0.1:8000/api/health
+{Colors.OKGREEN}WebSocket:{Colors.ENDC}        ws://127.0.0.1:8000/ws/{{client_id}}
 
 {Colors.BOLD}Frontend Communication:{Colors.ENDC}
 {Colors.OKGREEN}Frontend URL:{Colors.ENDC}     http://localhost:5173
 {Colors.OKGREEN}CORS Enabled:{Colors.ENDC}     ✓ Ready for frontend requests
 
-{Colors.WARNING}Note:{Colors.ENDC}
-- Make sure your frontend is running on http://localhost:5173
-- Configure Supabase and Gemini API keys in .env
+{Colors.WARNING}CRITICAL:{Colors.ENDC}
+- Backend running on 127.0.0.1:8000 (matches proxy config)
+- Configure Gemini API key in .env for AI features
 - Use Ctrl+C to stop the server
 
 {Colors.OKGREEN}Ready to generate synthetic data! ✨{Colors.ENDC}

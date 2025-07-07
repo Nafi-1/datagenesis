@@ -16,7 +16,7 @@ export const useWebSocket = () => {
     }
 
     const clientId = user?.id || (isGuest ? 'guest_user' : 'anonymous');
-    const wsUrl = `ws://localhost:8000/ws/${clientId}`;
+    const wsUrl = `ws://127.0.0.1:8000/ws/${clientId}`;  // Use 127.0.0.1 to match backend
     
     console.log('🔌 Attempting WebSocket connection to:', wsUrl);
     setConnectionStatus('connecting');
