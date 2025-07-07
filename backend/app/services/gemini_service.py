@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import uuid
 import logging
 import os
-from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -14,31 +13,36 @@ class GeminiService:
     def __init__(self):
         self.model = None
         self.is_initialized = False
+        self.api_key = None
         
     async def initialize(self):
         """Initialize Gemini 2.0 Flash"""
         try:
-            # Get API key from settings (which reads from .env)
-            api_key = settings.gemini_api_key
+            # Get API key from environment variables
+            self.api_key = os.getenv('GEMINI_API_KEY') or os.getenv('VITE_GEMINI_API_KEY')
             
-            logger.info(f"🔑 Gemini API key status: {'configured' if api_key and api_key != 'your_gemini_api_key' else 'not configured'}")
+            logger.info(f"🔑 Gemini API key status: {'configured' if self.api_key and self.api_key != 'your_gemini_api_key' else 'not configured'}")
+            logger.info(f"🔑 API key preview: {self.api_key[:10] + '...' if self.api_key and len(self.api_key) > 10 else 'None'}")
             
-            if not api_key or api_key == 'your_gemini_api_key':
+            if not self.api_key or self.api_key == 'your_gemini_api_key':
                 logger.warning("⚠️ Gemini API key not configured. Check your .env file.")
+                logger.warning("💡 Set GEMINI_API_KEY in backend/.env file")
                 self.is_initialized = False
                 return
             
             logger.info("🤖 Initializing Gemini 2.0 Flash...")
-            genai.configure(api_key=api_key)
+            genai.configure(api_key=self.api_key)
             self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
             
-            # Test the connection
+            # Test the connection with a simple prompt
+            logger.info("🧪 Testing Gemini connection...")
             test_response = await self._generate_content_async("Test connection. Respond with only: OK")
-            if test_response and test_response.text and "ok" in test_response.text.lower():
+            
+            if test_response and test_response.text and "ok" in test_response.text.lower().strip():
                 self.is_initialized = True
-                logger.info("✅ Gemini 2.0 Flash initialized successfully!")
+                logger.info("✅ Gemini 2.0 Flash initialized and tested successfully!")
             else:
-                logger.error(f"❌ Gemini test failed. Response: {test_response.text if test_response else 'No response'}")
+                logger.error(f"❌ Gemini test failed. Response: '{test_response.text if test_response else 'No response'}'")
                 self.is_initialized = False
                 
         except Exception as e:
@@ -51,32 +55,33 @@ class GeminiService:
             return {
                 "status": "offline",
                 "model": "gemini-2.0-flash-exp",
-                "message": f"API key: {'configured' if settings.gemini_api_key != 'your_gemini_api_key' else 'not configured'}, init: {self.is_initialized}"
+                "message": f"API key not configured or initialization failed",
+                "api_key_configured": bool(self.api_key and self.api_key != 'your_gemini_api_key')
             }
         
         try:
             # Quick health check
-            response = await self._generate_content_async("Health check. Respond with 'OK'.")
-            if response and "ok" in response.text.lower():
+            response = await self._generate_content_async("Health check. Respond with only: OK")
+            if response and response.text and "ok" in response.text.lower().strip():
                 return {
                     "status": "online",
                     "model": "gemini-2.0-flash-exp",
                     "message": "Fully operational",
-                    "api_key_status": "configured"
+                    "api_key_configured": True
                 }
             else:
                 return {
                     "status": "degraded",
                     "model": "gemini-2.0-flash-exp", 
                     "message": "Responding but degraded",
-                    "api_key_status": "configured"
+                    "api_key_configured": True
                 }
         except Exception as e:
             return {
                 "status": "error",
                 "model": "gemini-2.0-flash-exp",
                 "message": f"Error: {str(e)}",
-                "api_key_status": "configured" if settings.gemini_api_key != 'your_gemini_api_key' else "not configured"
+                "api_key_configured": bool(self.api_key and self.api_key != 'your_gemini_api_key')
             }
     
     async def generate_schema_from_natural_language(
@@ -251,7 +256,7 @@ class GeminiService:
         8. Privacy considerations
         9. Bias detection
         
-        Return ONLY valid JSON:
+        Return the response as JSON with the following structure:
         {{
           "domain": "detected_domain",
           "confidence": 0.95,
