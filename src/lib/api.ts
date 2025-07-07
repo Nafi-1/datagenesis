@@ -2,6 +2,9 @@ import axios from 'axios';
 import { useStore } from '../store/useStore';
 import toast from 'react-hot-toast';
 
+// Global WebSocket reference for API integration
+let globalWebSocket: WebSocket | null = null;
+
 // Determine backend URL based on environment
 const getBackendUrl = () => {
   // In development, try direct connection first, then fall back to proxy
@@ -165,6 +168,48 @@ export class ApiService {
       return response.data;
     } catch (error) {
       console.error('❌ Data analysis failed:', error);
+      throw error;
+    }
+  }
+
+  // Real-time data generation with WebSocket updates
+  static async generateSyntheticDataWithUpdates(config: any, onUpdate?: (update: any) => void) {
+    try {
+      console.log('🚀 Starting real-time AI generation with config:', config);
+      
+      // Try to establish WebSocket connection for real-time updates
+      if (!globalWebSocket || globalWebSocket.readyState !== WebSocket.OPEN) {
+        try {
+          const clientId = useStore.getState().user?.id || 'guest_user';
+          globalWebSocket = new WebSocket(`ws://localhost:8000/ws/${clientId}`);
+          
+          globalWebSocket.onmessage = (event) => {
+            try {
+              const message = JSON.parse(event.data);
+              if (message.type === 'generation_update' && onUpdate) {
+                onUpdate(message.data);
+              }
+            } catch (error) {
+              console.error('❌ WebSocket message parsing error:', error);
+            }
+          };
+          
+          globalWebSocket.onopen = () => {
+            console.log('✅ WebSocket connected for real-time updates');
+          };
+          
+        } catch (wsError) {
+          console.warn('⚠️ WebSocket connection failed, proceeding without real-time updates:', wsError);
+        }
+      }
+      
+      // Start the generation
+      const response = await api.post('/generation/generate-local', config);
+      console.log('✅ AI generation completed:', response.data);
+      return response.data;
+      
+    } catch (error) {
+      console.error('❌ AI generation failed:', error);
       throw error;
     }
   }

@@ -1,72 +1,158 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { ApiService } from '../lib/api';
 
 export const useWebSocket = () => {
-  const { user } = useStore();
+  const { user, isGuest } = useStore();
   const [isConnected, setIsConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<any>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    if (!user) return;
+  const connect = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      return; // Already connected
+    }
 
-    // Create WebSocket connection
-    const ws = ApiService.createWebSocketConnection(user.id);
-    wsRef.current = ws;
+    const clientId = user?.id || (isGuest ? 'guest_user' : 'anonymous');
+    const wsUrl = `ws://localhost:8000/ws/${clientId}`;
+    
+    console.log('🔌 Attempting WebSocket connection to:', wsUrl);
+    setConnectionStatus('connecting');
 
-    ws.onopen = () => {
-      setIsConnected(true);
-      console.log('WebSocket connected');
-    };
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        setLastMessage(message);
+      ws.onopen = () => {
+        console.log('✅ WebSocket connected successfully');
+        setIsConnected(true);
+        setConnectionStatus('connected');
         
-        // Handle different message types
-        if (message.type === 'job_update') {
-          useStore.getState().updateGenerationJob(message.job_id, message.data);
-        } else if (message.type === 'agent_update') {
-          // Handle agent status updates
-          console.log('Agent update:', message);
-        } else if (message.type === 'system_metrics') {
-          // Handle system metrics updates
-          console.log('System metrics:', message.data);
+        // Start ping interval to keep connection alive
+        pingIntervalRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+          }
+        }, 30000); // Ping every 30 seconds
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          console.log('📩 WebSocket message received:', message.type);
+          setLastMessage(message);
+          
+          // Handle different message types
+          switch (message.type) {
+            case 'generation_progress':
+              console.log('🔄 Generation progress:', message.data);
+              break;
+            case 'generation_update':
+              console.log('📊 Generation update:', message.data);
+              break;
+            case 'agent_status':
+              console.log('🤖 Agent status update:', message.data);
+              break;
+            case 'connection_established':
+              console.log('🎉 Connection established:', message.client_id);
+              break;
+            case 'pong':
+              // Heartbeat response
+              break;
+            default:
+              console.log('📨 Unknown message type:', message.type);
+          }
+        } catch (error) {
+          console.error('❌ Error parsing WebSocket message:', error, event.data);
         }
-      } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
-      }
-    };
+      };
 
-    ws.onclose = () => {
+      ws.onclose = (event) => {
+        console.log('🔌 WebSocket disconnected:', event.code, event.reason);
+        setIsConnected(false);
+        setConnectionStatus('disconnected');
+        
+        // Clear ping interval
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current = null;
+        }
+
+        // Attempt to reconnect after 3 seconds unless it was a clean close
+        if (event.code !== 1000 && event.code !== 1001) {
+          console.log('🔄 Attempting to reconnect in 3 seconds...');
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connect();
+          }, 3000);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('❌ WebSocket error:', error);
+        setConnectionStatus('error');
+        setIsConnected(false);
+      };
+
+    } catch (error) {
+      console.error('❌ Failed to create WebSocket connection:', error);
+      setConnectionStatus('error');
       setIsConnected(false);
-      console.log('WebSocket disconnected');
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setIsConnected(false);
-    };
-
-    // Cleanup on unmount
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, [user]);
-
-  const sendMessage = (message: any) => {
-    if (wsRef.current && isConnected) {
-      wsRef.current.send(JSON.stringify(message));
     }
   };
 
+  const disconnect = () => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+
+    if (wsRef.current) {
+      wsRef.current.close(1000, 'User initiated disconnect');
+      wsRef.current = null;
+    }
+
+    setIsConnected(false);
+    setConnectionStatus('disconnected');
+  };
+
+  const sendMessage = (message: any) => {
+    if (wsRef.current && isConnected) {
+      try {
+        wsRef.current.send(JSON.stringify(message));
+        console.log('📤 WebSocket message sent:', message.type);
+      } catch (error) {
+        console.error('❌ Failed to send WebSocket message:', error);
+      }
+    } else {
+      console.warn('⚠️ WebSocket not connected, cannot send message');
+    }
+  };
+
+  useEffect(() => {
+    // Connect when user is available
+    if (user || isGuest) {
+      connect();
+    }
+
+    // Cleanup on unmount
+    return () => {
+      disconnect();
+    };
+  }, [user, isGuest]);
+
   return {
     isConnected,
+    connectionStatus,
     lastMessage,
-    sendMessage
+    sendMessage,
+    connect,
+    disconnect
   };
 };

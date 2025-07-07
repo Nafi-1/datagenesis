@@ -396,9 +396,9 @@ export class DataGeneratorService {
     try {
       console.log('🎯 Starting synthetic dataset generation with config:', config);
       
-      // Always try backend first with proper config
+      // Always try backend first with real-time updates
       try {
-        console.log('🔗 Attempting backend generation with enhanced config...');
+        console.log('🤖 Attempting AI-powered backend generation...');
         
         // Enhance config with proper structure
         const enhancedConfig = {
@@ -408,12 +408,20 @@ export class DataGeneratorService {
           schema: config.schema || {}
         };
         
-        const result = await ApiService.generateLocalData(enhancedConfig);
-        console.log('✅ Backend generation successful:', result);
+        // Use the new real-time generation API
+        const result = await ApiService.generateSyntheticDataWithUpdates(
+          enhancedConfig,
+          (update) => {
+            console.log('🔄 Real-time update:', update);
+            // You can emit events here for UI updates
+          }
+        );
+        
+        console.log('✅ AI-powered generation successful:', result);
         return result;
       } catch (backendError) {
-        console.log('⚠️ Backend generation failed, using local fallback:', (backendError as any)?.message);
-        toast.error('Backend temporarily unavailable. Using local AI generation.', { duration: 3000 });
+        console.log('⚠️ AI backend generation failed, using fallback:', (backendError as any)?.message);
+        toast.error('AI backend temporarily unavailable. Using basic generation.', { duration: 3000 });
         
         // Continue with local generation below
       }
