@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
+import AIProcessLogger from '../components/AIProcessLogger';
 
 const DataGenerator: React.FC = () => {
   const [selectedDataType, setSelectedDataType] = useState('tabular');
@@ -890,57 +891,11 @@ const DataGenerator: React.FC = () => {
           </motion.div>
 
           {/* Generation Progress */}
-          {isGenerating && (
-            <motion.div 
-              className="p-6 bg-gray-800/50 backdrop-blur-xl border border-gray-700/50 rounded-xl"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
-                AI Agents Working
-              </h3>
-              
-              {/* Progress Bar */}
-              <div className="w-full bg-gray-700 rounded-full h-2">
-                <motion.div 
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500" 
-                  style={{ width: `${generationProgress}%` }}
-                  animate={{ width: `${generationProgress}%` }}
-                  transition={{ duration: 0.5 }}
-                />
-              </div>
-              <p className="text-sm text-purple-300 mt-2 font-medium">{generationProgress}% Complete</p>
-              
-              {/* Current Step */}
-              {currentStep && (
-                <div className="mt-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                  <p className="text-sm text-purple-200">{currentStep}</p>
-                </div>
-              )}
-              
-              {/* Recent Steps Log */}
-              {generationSteps.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-xs text-gray-400 mb-2">Recent Activity:</p>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {generationSteps.map((step, index) => (
-                      <motion.div 
-                        key={index}
-                        className="text-xs text-gray-300 p-2 bg-gray-700/30 rounded"
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        {step}
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
+          {/* AI Process Logger */}
+          <AIProcessLogger 
+            isVisible={isGenerating || generatedData !== null}
+            isGenerating={isGenerating}
+          />
 
           {/* Results */}
           {generatedData && (
@@ -1165,6 +1120,21 @@ const DataGenerator: React.FC = () => {
           )}
         </div>
       </div>
+      
+      {/* Full-width AI Process Logger for large screens */}
+      {(isGenerating || generatedData) && (
+        <motion.div
+          className="mt-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <AIProcessLogger 
+            isVisible={true}
+            isGenerating={isGenerating}
+          />
+        </motion.div>
+      )}
     </div>
   );
 };

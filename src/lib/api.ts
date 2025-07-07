@@ -136,7 +136,7 @@ export class ApiService {
   // Real-time data generation with WebSocket updates
   static async generateSyntheticDataWithUpdates(config: any, onUpdate?: (update: any) => void) {
     try {
-      console.log('🚀 Starting real-time AI generation with config:', config);
+      console.log('🚀 Starting real-time AI generation...');
       
       // Try to establish WebSocket connection for real-time updates
       if (!globalWebSocket || globalWebSocket.readyState !== WebSocket.OPEN) {
@@ -156,7 +156,7 @@ export class ApiService {
           };
           
           globalWebSocket.onopen = () => {
-            console.log('✅ WebSocket connected for real-time updates');
+            console.log('✅ WebSocket connected for AI process monitoring');
           };
           
         } catch (wsError) {
@@ -166,7 +166,7 @@ export class ApiService {
       
       // Start the generation
       const response = await api.post('/generation/generate-local', config);
-      console.log('✅ AI generation completed:', response.data);
+      console.log('✅ AI generation completed successfully');
       return response.data;
       
     } catch (error) {

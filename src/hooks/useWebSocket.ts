@@ -50,19 +50,35 @@ export const useWebSocket = () => {
               console.log('🔄 Generation progress:', message.data);
               break;
             case 'generation_update':
-              // Show more detailed logs for generation updates
+              // Enhanced logging for development and debugging
               const { step, progress, message: msg } = message.data;
               
-              // Enhanced logging with clearer indicators
-              if (msg.includes('Gemini 2.0 Flash')) {
-                console.log(`🤖 GEMINI ACTIVE: [${progress}%] ${msg}`);
-              } else if (msg.includes('fallback') || msg.includes('intelligent')) {
-                console.log(`🏠 LOCAL MODE: [${progress}%] ${msg}`);
-              } else if (msg.includes('batch') || msg.includes('parsing')) {
-                console.log(`⚙️ GEMINI PROCESSING: [${progress}%] ${msg}`);
-              } else {
-                console.log(`📊 AI AGENT: [${progress}%] ${msg}`);
+              // Console logging for developers
+              if (import.meta.env.DEV) {
+                if (msg.includes('Gemini 2.0 Flash') || msg.includes('GEMINI')) {
+                  console.log(`🤖 GEMINI ACTIVE: [${progress}%] ${msg}`);
+                } else if (msg.includes('fallback') || msg.includes('FALLBACK')) {
+                  console.log(`🏠 FALLBACK MODE: [${progress}%] ${msg}`);
+                } else if (msg.includes('batch') || msg.includes('parsing')) {
+                  console.log(`⚙️ GEMINI PROCESSING: [${progress}%] ${msg}`);
+                } else if (msg.includes('Agent') || msg.includes('AGENT')) {
+                  console.log(`🤖 AI AGENT: [${progress}%] ${msg}`);
+                } else {
+                  console.log(`📊 PROCESS: [${progress}%] ${msg}`);
+                }
               }
+              
+              // Store detailed update for UI components
+              setLastMessage({
+                ...message,
+                data: {
+                  ...message.data,
+                  isGeminiActive: msg.includes('Gemini 2.0 Flash') || msg.includes('GEMINI'),
+                  isFallback: msg.includes('fallback') || msg.includes('FALLBACK'),
+                  isAgent: msg.includes('Agent') || msg.includes('AGENT'),
+                  timestamp: Date.now()
+                }
+              });
               break;
             case 'agent_status':
               console.log('🤖 Agent status update:', message.data);

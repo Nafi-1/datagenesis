@@ -583,7 +583,8 @@ Generate {row_count} realistic rows for {domain} domain:"""
         try:
             # Strategy 1: Clean and direct parse
             cleaned_text = self._clean_json_response(text)
-            logger.debug(f"📝 Cleaned text preview: {cleaned_text[:100]}...")
+            if import.meta.env.DEV:
+                logger.debug(f"📝 Cleaned text preview: {cleaned_text[:100]}...")
             
             try:
                 result = json.loads(cleaned_text)
@@ -594,7 +595,7 @@ Generate {row_count} realistic rows for {domain} domain:"""
                     logger.info("✅ Strategy 1 successful: Single object converted to array")
                     return [result]
             except json.JSONDecodeError as e:
-                logger.warning(f"⚠️ Strategy 1 failed: {str(e)}")
+                logger.debug(f"⚠️ Strategy 1 failed: {str(e)}")
             
             # Strategy 2: Extract array content
             array_content = self._extract_json_array(cleaned_text)
@@ -604,7 +605,7 @@ Generate {row_count} realistic rows for {domain} domain:"""
                     logger.info("✅ Strategy 2 successful: Array extraction")
                     return result if isinstance(result, list) else [result]
                 except json.JSONDecodeError as e:
-                    logger.warning(f"⚠️ Strategy 2 failed: {str(e)}")
+                    logger.debug(f"⚠️ Strategy 2 failed: {str(e)}")
             
             # Strategy 3: Fix common JSON errors
             fixed_json = self._fix_common_json_errors(cleaned_text)
@@ -614,7 +615,7 @@ Generate {row_count} realistic rows for {domain} domain:"""
                     logger.info("✅ Strategy 3 successful: Error fixing")
                     return result if isinstance(result, list) else [result]
                 except json.JSONDecodeError as e:
-                    logger.warning(f"⚠️ Strategy 3 failed: {str(e)}")
+                    logger.debug(f"⚠️ Strategy 3 failed: {str(e)}")
             
             # Strategy 4: Parse line by line (for badly formatted responses)
             line_parsed = self._parse_line_by_line(text)
