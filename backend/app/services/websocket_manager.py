@@ -52,6 +52,7 @@ class ConnectionManager:
         for client_id, connection in self.active_connections.items():
             try:
                 await connection.send_text(message)
+                logger.debug(f"📡 Broadcast sent to {client_id}")
             except Exception as e:
                 logger.error(f"❌ Failed to broadcast to {client_id}: {e}")
                 disconnected.append(client_id)

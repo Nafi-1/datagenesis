@@ -62,6 +62,11 @@ async def startup_event():
     logger.info("🚀 Starting DataGenesis AI API...")
     await gemini_service.initialize()
     await orchestrator.initialize()
+    
+    # Log initialization status
+    gemini_status = await gemini_service.health_check()
+    logger.info(f"🤖 Gemini Status: {gemini_status}")
+    
     logger.info("🎯 DataGenesis AI API started successfully!")
 
 @app.on_event("shutdown") 

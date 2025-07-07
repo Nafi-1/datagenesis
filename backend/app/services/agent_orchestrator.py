@@ -57,16 +57,30 @@ class AgentOrchestrator:
                 "progress": progress,
                 "message": message,
                 "timestamp": datetime.utcnow().isoformat(),
-                "agent_data": agent_data or {}
+                "agent_data": agent_data or {},
+                "gemini_status": "online" if self.gemini_service.is_initialized else "offline"
             }
             
             logger.info(f"🔄 [{progress}%] {step}: {message}")
             
             if websocket_manager:
-                await websocket_manager.broadcast(json.dumps({
+                try:
+                    await websocket_manager.broadcast(json.dumps({
+                        "type": "generation_update",
+                        "data": update
+                    }))
+                    logger.debug(f"📡 WebSocket update sent: {step} {progress}%")
+                except Exception as e:
+                    logger.warning(f"⚠️ WebSocket broadcast failed: {e}")
+                
+                # Also send to job-specific channel if available
+                try:
+                    await websocket_manager.send_personal_message(json.dumps({
                     "type": "generation_update",
                     "data": update
-                }))
+                    }), "guest_user")  # For now, assume guest_user
+                except Exception as e:
+                    logger.debug(f"Personal message failed: {e}")
         
         try:
             await send_update("initialization", 5, "🤖 Initializing AI agents...")
@@ -107,7 +121,10 @@ class AgentOrchestrator:
             await send_update("quality_planning", 75, "✅ Quality Agent: Generation strategy optimized")
             
             # Phase 6: Synthetic Data Generation (75-90%)
-            await send_update("data_generation", 80, "🎨 Generating synthetic data with AI...")
+            if self.gemini_service.is_initialized:
+                await send_update("data_generation", 80, "🤖 Generating synthetic data with Gemini 2.0 Flash...")
+            else:
+                await send_update("data_generation", 80, "🏠 Generating synthetic data with intelligent fallback...")
             
             # Combine all agent insights for generation
             generation_context = {

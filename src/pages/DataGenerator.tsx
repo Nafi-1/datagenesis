@@ -38,6 +38,8 @@ const DataGenerator: React.FC = () => {
   const [generatedData, setGeneratedData] = useState<any>(null);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [generationProgress, setGenerationProgress] = useState(0);
+  const [generationSteps, setGenerationSteps] = useState<string[]>([]);
+  const [currentStep, setCurrentStep] = useState<string>('');
   const [inputMethod, setInputMethod] = useState<'upload' | 'describe'>('describe');
   const [naturalLanguageDescription, setNaturalLanguageDescription] = useState('');
   const [generatedSchema, setGeneratedSchema] = useState<any>(null);
@@ -83,19 +85,26 @@ const DataGenerator: React.FC = () => {
   
   // Listen for WebSocket updates
   useEffect(() => {
-    if (lastMessage?.type === 'job_update') {
+    if (lastMessage?.type === 'generation_update') {
       const { data } = lastMessage;
-      if (data.progress !== undefined) {
+      console.log('🔄 Real-time generation update:', data);
+      
+      if (data.progress !== undefined && data.progress >= 0) {
         setGenerationProgress(data.progress);
       }
-      if (data.status === 'completed') {
-        setGeneratedData(data.result);
+      
+      if (data.step && data.message) {
+        setCurrentStep(data.message);
+        setGenerationSteps(prev => [...prev.slice(-4), `[${data.progress}%] ${data.message}`]);
+      }
+      
+      if (data.progress === 100) {
         setIsGenerating(false);
         setGenerationStep(4);
-        toast.success('Synthetic data generated successfully!');
-      } else if (data.status === 'failed') {
+        toast.success('🎉 Multi-agent AI generation completed!');
+      } else if (data.progress === -1) {
         setIsGenerating(false);
-        toast.error('Generation failed: ' + data.error_message);
+        toast.error('❌ Generation failed: ' + data.message);
       }
     }
   }, [lastMessage]);
@@ -243,6 +252,8 @@ const DataGenerator: React.FC = () => {
     setIsGenerating(true);
     setGenerationStep(3);
     setGenerationProgress(0);
+    setGenerationSteps([]);
+    setCurrentStep('Starting generation...');
     
     
     try {
@@ -773,13 +784,55 @@ const DataGenerator: React.FC = () => {
 
           {/* Generation Progress */}
           {isGenerating && (
-            <div className="p-4 bg-gray-800/50 backdrop-blur-xl border border-gray-700/50 rounded-xl">
-              <h3 className="text-lg font-semibold text-white mb-2">Generation Progress</h3>
+            <motion.div 
+              className="p-6 bg-gray-800/50 backdrop-blur-xl border border-gray-700/50 rounded-xl"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+                AI Agents Working
+              </h3>
+              
+              {/* Progress Bar */}
               <div className="w-full bg-gray-700 rounded-full h-2">
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300" style={{ width: `${generationProgress}%` }}></div>
+                <motion.div 
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500" 
+                  style={{ width: `${generationProgress}%` }}
+                  animate={{ width: `${generationProgress}%` }}
+                  transition={{ duration: 0.5 }}
+                />
               </div>
-              <p className="text-sm text-gray-400 mt-2">{generationProgress}% Complete</p>
-            </div>
+              <p className="text-sm text-purple-300 mt-2 font-medium">{generationProgress}% Complete</p>
+              
+              {/* Current Step */}
+              {currentStep && (
+                <div className="mt-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                  <p className="text-sm text-purple-200">{currentStep}</p>
+                </div>
+              )}
+              
+              {/* Recent Steps Log */}
+              {generationSteps.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs text-gray-400 mb-2">Recent Activity:</p>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {generationSteps.map((step, index) => (
+                      <motion.div 
+                        key={index}
+                        className="text-xs text-gray-300 p-2 bg-gray-700/30 rounded"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        {step}
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
           )}
 
           {/* Results */}
