@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import uuid
 import logging
 import os
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ class GeminiService:
         5. Logical relationships between fields
         6. Domain-specific considerations
         
-        Return ONLY a valid JSON object with this exact structure:
+        Return ONLY valid JSON (no explanations) with this exact structure:
         {{
           "schema": {{
             "field_name": {{
@@ -152,7 +153,7 @@ class GeminiService:
             logger.info(f"✅ Gemini generated schema with {len(result['schema'])} fields")
             return result
             
-        except Exception as e:
+            parsed = self._parse_json_response_enhanced(text)
             logger.error(f"❌ Gemini schema generation failed: {str(e)}")
             return self._generate_intelligent_fallback_schema(description, domain)
     
@@ -256,7 +257,7 @@ class GeminiService:
         8. Privacy considerations
         9. Bias detection
         
-        Return the response as JSON with the following structure:
+        Return ONLY valid JSON (no explanations) with this exact structure:
         {{
           "domain": "detected_domain",
           "confidence": 0.95,
@@ -280,7 +281,7 @@ class GeminiService:
         
         try:
             response = await self._generate_content_async(prompt)
-            analysis = self._parse_json_response(response.text)
+            analysis = self._parse_json_response_enhanced(response.text)
             
             logger.info(f"✅ Gemini analysis complete: {analysis.get('domain', 'unknown')} domain")
             return analysis
@@ -404,6 +405,29 @@ class GeminiService:
             logger.error(f"❌ JSON parsing failed: {str(e)}")
             return {"error": "Failed to parse response"}
     
+    def _parse_json_response_enhanced(self, text: str) -> Dict[str, Any]:
+        """Enhanced JSON parsing for single objects"""
+        try:
+            cleaned = self._clean_json_response(text)
+            
+            # Try direct parse
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError:
+                pass
+            
+            # Try fixing common errors
+            fixed = self._fix_common_json_errors(cleaned)
+            try:
+                return json.loads(fixed)
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Enhanced JSON parsing failed: {str(e)}")
+                return {"error": "Failed to parse response"}
+                
+        except Exception as e:
+            logger.error(f"❌ JSON response parsing failed: {str(e)}")
+            return {"error": "Failed to parse response"}
+    
     def _parse_json_array_response(self, text: str) -> List[Dict[str, Any]]:
         """Parse JSON array from Gemini response"""
         try:
@@ -430,6 +454,166 @@ class GeminiService:
         except Exception as e:
             logger.error(f"❌ JSON array parsing failed: {str(e)}")
             return []
+
+    def _parse_json_array_response_enhanced(self, text: str) -> List[Dict[str, Any]]:
+        """Enhanced JSON array parsing with multiple fallback strategies"""
+        logger.info("🔧 Parsing Gemini response with enhanced error handling...")
+        
+        try:
+            # Strategy 1: Clean and direct parse
+            cleaned_text = self._clean_json_response(text)
+            logger.debug(f"📝 Cleaned text preview: {cleaned_text[:100]}...")
+            
+            try:
+                result = json.loads(cleaned_text)
+                if isinstance(result, list):
+                    logger.info("✅ Strategy 1 successful: Direct JSON parse")
+                    return result
+                elif isinstance(result, dict):
+                    logger.info("✅ Strategy 1 successful: Single object converted to array")
+                    return [result]
+            except json.JSONDecodeError as e:
+                logger.warning(f"⚠️ Strategy 1 failed: {str(e)}")
+            
+            # Strategy 2: Extract array content
+            array_content = self._extract_json_array(cleaned_text)
+            if array_content:
+                try:
+                    result = json.loads(array_content)
+                    logger.info("✅ Strategy 2 successful: Array extraction")
+                    return result if isinstance(result, list) else [result]
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️ Strategy 2 failed: {str(e)}")
+            
+            # Strategy 3: Fix common JSON errors
+            fixed_json = self._fix_common_json_errors(cleaned_text)
+            if fixed_json:
+                try:
+                    result = json.loads(fixed_json)
+                    logger.info("✅ Strategy 3 successful: Error fixing")
+                    return result if isinstance(result, list) else [result]
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️ Strategy 3 failed: {str(e)}")
+            
+            # Strategy 4: Parse line by line (for badly formatted responses)
+            line_parsed = self._parse_line_by_line(text)
+            if line_parsed:
+                logger.info("✅ Strategy 4 successful: Line-by-line parsing")
+                return line_parsed
+            
+            logger.error("❌ All parsing strategies failed")
+            return []
+            
+        except Exception as e:
+            logger.error(f"❌ Enhanced JSON parsing failed: {str(e)}")
+            return []
+    
+    def _clean_json_response(self, text: str) -> str:
+        """Clean Gemini response for JSON parsing"""
+        # Remove code block markers
+        text = text.strip()
+        if text.startswith('```json'):
+            text = text[7:]
+        elif text.startswith('```'):
+            text = text[3:]
+        if text.endswith('```'):
+            text = text[:-3]
+        
+        # Remove any text before the first [ or {
+        json_start = -1
+        for i, char in enumerate(text):
+            if char in '[{':
+                json_start = i
+                break
+        
+        if json_start > 0:
+            text = text[json_start:]
+        
+        # Remove any text after the last ] or }
+        json_end = -1
+        for i in range(len(text) - 1, -1, -1):
+            if text[i] in ']}':
+                json_end = i + 1
+                break
+        
+        if json_end > 0:
+            text = text[:json_end]
+        
+        return text.strip()
+    
+    def _extract_json_array(self, text: str) -> str:
+        """Extract JSON array from text"""
+        start_idx = text.find('[')
+        end_idx = text.rfind(']')
+        
+        if start_idx != -1 and end_idx > start_idx:
+            return text[start_idx:end_idx + 1]
+        
+        return ""
+    
+    def _fix_common_json_errors(self, text: str) -> str:
+        """Fix common JSON formatting errors"""
+        try:
+            # Remove trailing commas
+            text = re.sub(r',(\s*[}\]])', r'\1', text)
+            
+            # Fix single quotes to double quotes
+            text = re.sub(r"'([^']*)':", r'"\1":', text)  # Keys
+            text = re.sub(r":\s*'([^']*)'", r': "\1"', text)  # String values
+            
+            # Remove comments
+            text = re.sub(r'//.*?\n', '\n', text)
+            text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+            
+            # Fix missing commas between objects
+            text = re.sub(r'}\s*{', '}, {', text)
+            
+            return text
+        except Exception as e:
+            logger.warning(f"Error fixing JSON: {str(e)}")
+            return text
+    
+    def _parse_line_by_line(self, text: str) -> List[Dict[str, Any]]:
+        """Parse response line by line for badly formatted JSON"""
+        try:
+            lines = [line.strip() for line in text.split('\n')]
+            clean_lines = []
+            
+            for line in lines:
+                if line and not line.startswith('//') and not line.startswith('#'):
+                    clean_lines.append(line)
+            
+            if clean_lines:
+                clean_text = '\n'.join(clean_lines)
+                return json.loads(clean_text)
+        except Exception as e:
+            logger.warning(f"Line-by-line parsing failed: {str(e)}")
+        
+        return []
+    
+    def _validate_generated_data(self, data: List[Dict[str, Any]], schema: Dict[str, Any], expected_count: int):
+        """Validate generated data against schema"""
+        if not data:
+            raise ValueError("No data generated")
+        
+        if len(data) < min(expected_count, 10):  # At least 10 or expected count
+            logger.warning(f"⚠️ Generated {len(data)} rows, expected {expected_count}")
+        
+        required_fields = set(schema.keys())
+        
+        # Check first few rows for schema compliance
+        for i, row in enumerate(data[:min(3, len(data))]):
+            if not isinstance(row, dict):
+                raise ValueError(f"Row {i} is not a dictionary: {type(row)}")
+            
+            row_fields = set(row.keys())
+            missing_fields = required_fields - row_fields
+            
+            if missing_fields:
+                logger.warning(f"⚠️ Row {i} missing fields: {missing_fields}")
+                # Don't fail, just warn
+        
+        logger.info(f"✅ Data validation passed: {len(data)} rows with {len(data[0].keys()) if data else 0} fields")
     
     def _generate_intelligent_fallback_schema(self, description: str, domain: str) -> Dict[str, Any]:
         """Generate intelligent fallback schema"""

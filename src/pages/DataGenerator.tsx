@@ -363,6 +363,24 @@ const DataGenerator: React.FC = () => {
               <span className="text-sm text-blue-300">Guest Mode - Full Access</span>
             </div>
           )}
+          
+          {/* AI Status Indicator */}
+          {isGenerating && (
+            <div className="mt-4 p-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
+                <span className="text-purple-300 text-sm font-medium">
+                  {backendHealthy ? 'Gemini 2.0 Flash Active' : 'Local AI Active'}
+                </span>
+              </div>
+              <div className="text-xs text-purple-200">
+                {backendHealthy 
+                  ? 'Using Google AI for maximum quality and realism'
+                  : 'Using intelligent fallback generation'
+                }
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {/* Backend Status Indicator */}
