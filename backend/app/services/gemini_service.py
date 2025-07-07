@@ -583,9 +583,8 @@ Generate {row_count} realistic rows for {domain} domain:"""
         try:
             # Strategy 1: Clean and direct parse
             cleaned_text = self._clean_json_response(text)
-            if import.meta.env.DEV:
-                logger.debug(f"📝 Cleaned text preview: {cleaned_text[:100]}...")
-            
+            logger.debug(f"📝 Cleaned text preview: {cleaned_text[:100]}...")
+            # Remove commented-out code, just keep the cleaned_text assignment            
             try:
                 result = json.loads(cleaned_text)
                 if isinstance(result, list):
