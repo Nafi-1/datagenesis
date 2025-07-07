@@ -50,7 +50,15 @@ export const useWebSocket = () => {
               console.log('🔄 Generation progress:', message.data);
               break;
             case 'generation_update':
-              console.log('📊 Generation update:', message.data);
+              // Show more detailed logs for generation updates
+              const { step, progress, message: msg } = message.data;
+              if (msg.includes('Gemini')) {
+                console.log('🤖 Gemini AI:', `[${progress}%] ${msg}`);
+              } else if (msg.includes('fallback')) {
+                console.log('🏠 Fallback:', `[${progress}%] ${msg}`);
+              } else {
+                console.log('📊 Agent update:', `[${progress}%] ${msg}`);
+              }
               break;
             case 'agent_status':
               console.log('🤖 Agent status update:', message.data);

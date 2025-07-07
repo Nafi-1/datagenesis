@@ -166,7 +166,7 @@ class GeminiService:
             logger.info(f"✅ Gemini generated schema with {len(result['schema'])} fields")
             return result
             
-            parsed = self._parse_json_response_enhanced(text)
+        except Exception as e:
             logger.error(f"❌ Gemini schema generation failed: {str(e)}")
             return self._generate_intelligent_fallback_schema(description, domain)
     
@@ -183,9 +183,9 @@ class GeminiService:
             logger.warning("🔄 Gemini not available, using intelligent fallback")
             return self._generate_intelligent_fallback_data(schema, config.get('rowCount', 100))
         
-        logger.info(f"🤖 Generating synthetic data with Gemini 2.0 Flash...")
-        
         row_count = config.get('rowCount', 100)
+        logger.info(f"🤖 Generating {row_count} rows with Gemini 2.0 Flash...")
+        
         domain = config.get('domain', 'general')
         
         # Prepare context
@@ -197,46 +197,154 @@ class GeminiService:
             "domain": domain
         }
         
-        prompt = f"""
-        You are an expert synthetic data generator. Generate {row_count} rows of highly realistic synthetic data based on this specification:
+        # Split large requests to avoid JSON parsing issues
+        if row_count > 50:
+            logger.info(f"🔄 Large request detected ({row_count} rows). Splitting into smaller batches...")
+            return await self._generate_large_dataset_batched(schema, config, description, source_data)
         
-        Schema: {json.dumps(schema, indent=2)}
-        Domain: {domain}
-        Description: "{description}"
-        Configuration: {json.dumps(config, indent=2)}
-        {f"Sample Data Pattern: {json.dumps(source_data[:2], indent=2)}" if source_data else ""}
-        
-        Requirements:
-        1. Follow the exact schema structure and data types
-        2. Generate realistic, contextually appropriate values
-        3. Maintain logical relationships between fields
-        4. Ensure data variety and realistic distributions
-        5. Apply domain-specific knowledge and patterns
-        6. Make the data production-ready and useful for ML training
-        
-        Return ONLY a valid JSON array of {row_count} objects:
-        [
-          {{"field1": "realistic_value1", "field2": "realistic_value2"}},
-          {{"field1": "realistic_value3", "field2": "realistic_value4"}},
-          ...
-        ]
-        
-        Generate high-quality, realistic data that could be used for real model training.
-        """
-        
+        prompt = f"""Generate EXACTLY {row_count} rows of synthetic data as a PERFECTLY VALID JSON ARRAY.
+
+CRITICAL FORMATTING RULES:
+1. Output MUST start with [ and end with ]
+2. Each object must be properly formatted JSON
+3. Use double quotes for all strings
+4. NO trailing commas
+5. NO explanatory text - ONLY the JSON array
+
+Schema to follow: {json.dumps(schema, indent=2)}
+Domain: {domain}
+Description: "{description}"
+
+Generate realistic data that follows these patterns:
+- Use appropriate data types as specified in schema
+- Make values realistic for the {domain} domain
+- Ensure variety and realistic distributions
+- Maintain logical relationships between fields
+
+Output format example:
+[
+  {{"field1": "value1", "field2": 123, "field3": true}},
+  {{"field1": "value2", "field2": 456, "field3": false}}
+]
+
+Generate {row_count} rows now:"""
+
         try:
+            logger.info("🔄 Sending request to Gemini 2.0 Flash...")
             response = await self._generate_content_async(prompt)
-            data = self._parse_json_array_response(response.text)
+            
+            if not response or not response.text:
+                raise ValueError("Empty response from Gemini")
+            
+            logger.info(f"📥 Received response from Gemini ({len(response.text)} characters)")
+            
+            # Use enhanced parsing for better error handling
+            data = self._parse_json_array_response_enhanced(response.text)
             
             if not data or len(data) == 0:
-                raise ValueError("No data generated")
+                raise ValueError("No valid data parsed from Gemini response")
             
-            logger.info(f"✅ Gemini generated {len(data)} realistic data records")
-            return data[:row_count]  # Ensure we don't exceed requested count
+            # Validate against schema
+            self._validate_generated_data(data, schema, row_count)
+            
+            # Ensure we have the right number of rows
+            final_data = data[:row_count] if len(data) > row_count else data
+            
+            logger.info(f"✅ Gemini generated {len(final_data)} realistic data records successfully!")
+            return final_data
             
         except Exception as e:
-            logger.error(f"❌ Gemini data generation failed: {str(e)}")
+            logger.error(f"❌ Gemini generation failed: {str(e)}")
+            logger.info("🔄 Falling back to intelligent local generation...")
             return self._generate_intelligent_fallback_data(schema, row_count)
+    
+    async def _generate_large_dataset_batched(
+        self, 
+        schema: Dict[str, Any], 
+        config: Dict[str, Any],
+        description: str,
+        source_data: List[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Generate large datasets in smaller batches to avoid JSON parsing issues"""
+        
+        total_rows = config.get('rowCount', 100)
+        batch_size = 25  # Smaller batches for more reliable parsing
+        batches = (total_rows + batch_size - 1) // batch_size  # Ceiling division
+        
+        logger.info(f"🔄 Generating {total_rows} rows in {batches} batches of {batch_size}")
+        
+        all_data = []
+        
+        for batch_num in range(batches):
+            current_batch_size = min(batch_size, total_rows - len(all_data))
+            
+            logger.info(f"📦 Generating batch {batch_num + 1}/{batches} ({current_batch_size} rows)...")
+            
+            batch_config = {**config, 'rowCount': current_batch_size}
+            
+            try:
+                batch_data = await self._generate_single_batch(schema, batch_config, description, batch_num)
+                
+                if batch_data:
+                    all_data.extend(batch_data)
+                    logger.info(f"✅ Batch {batch_num + 1} completed: {len(batch_data)} rows")
+                else:
+                    logger.warning(f"⚠️ Batch {batch_num + 1} failed, using fallback")
+                    fallback_batch = self._generate_intelligent_fallback_data(schema, current_batch_size)
+                    all_data.extend(fallback_batch)
+                
+            except Exception as e:
+                logger.error(f"❌ Batch {batch_num + 1} failed: {str(e)}")
+                fallback_batch = self._generate_intelligent_fallback_data(schema, current_batch_size)
+                all_data.extend(fallback_batch)
+            
+            # Stop if we have enough data
+            if len(all_data) >= total_rows:
+                break
+        
+        final_data = all_data[:total_rows]
+        logger.info(f"🎉 Large dataset generation completed: {len(final_data)} total rows")
+        return final_data
+    
+    async def _generate_single_batch(
+        self, 
+        schema: Dict[str, Any], 
+        config: Dict[str, Any],
+        description: str,
+        batch_num: int
+    ) -> List[Dict[str, Any]]:
+        """Generate a single batch of data with enhanced error handling"""
+        
+        row_count = config.get('rowCount', 25)
+        domain = config.get('domain', 'general')
+        
+        prompt = f"""Generate EXACTLY {row_count} rows of synthetic data as VALID JSON ARRAY.
+
+Schema: {json.dumps(schema, indent=2)}
+Domain: {domain}
+Batch: {batch_num + 1}
+
+CRITICAL: Return ONLY the JSON array, no explanations:
+[{{"field": "value"}}, {{"field": "value"}}]
+        
+Generate {row_count} realistic rows for {domain} domain:"""
+
+        try:
+            response = await self._generate_content_async(prompt)
+            
+            if not response or not response.text:
+                return []
+            
+            data = self._parse_json_array_response_enhanced(response.text)
+            
+            if data and len(data) > 0:
+                return data[:row_count]
+            else:
+                return []
+                
+        except Exception as e:
+            logger.warning(f"❌ Batch generation failed: {str(e)}")
+            return []
     
     async def analyze_data_comprehensive(
         self, 

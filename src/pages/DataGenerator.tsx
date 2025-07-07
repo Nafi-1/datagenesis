@@ -369,15 +369,20 @@ const DataGenerator: React.FC = () => {
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
                 <span className="text-purple-300 text-sm font-medium">
-                  {backendHealthy ? 'Gemini 2.0 Flash Active' : 'Local AI Active'}
+                  {backendHealthy ? '🤖 Gemini 2.0 Flash Processing' : '🏠 Local AI Generation'}
                 </span>
               </div>
               <div className="text-xs text-purple-200">
                 {backendHealthy 
-                  ? 'Using Google AI for maximum quality and realism'
-                  : 'Using intelligent fallback generation'
+                  ? 'Using Google\'s latest AI model for maximum quality and realism'
+                  : 'Using intelligent multi-agent fallback generation'
                 }
               </div>
+              {backendHealthy && (
+                <div className="mt-2 text-xs text-green-300">
+                  ✨ Advanced JSON parsing • Batch processing • Schema validation
+                </div>
+              )}
             </div>
           )}
         </div>
