@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     redis_password: Optional[str] = None
     
     # AI Services - Fixed to properly read from .env
-    gemini_api_key: str = "your_gemini_api_key"
+    gemini_api_key: str = ""
     google_cloud_project_id: Optional[str] = None
     
     # Vector Database
