@@ -2,7 +2,7 @@ import google.generativeai as genai
 from typing import List, Dict, Any, Optional
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import logging
 import os
@@ -17,8 +17,8 @@ class GeminiService:
     async def initialize(self):
         """Initialize Gemini 2.0 Flash"""
         try:
-            # Get API key from environment
-            api_key = os.getenv('GEMINI_API_KEY') or os.getenv('VITE_GEMINI_API_KEY')
+            # Get API key from backend environment
+            api_key = os.getenv('GEMINI_API_KEY')
             
             if not api_key or api_key == 'your_gemini_api_key':
                 logger.warning("⚠️ Gemini API key not configured. Using fallback mode.")
@@ -48,7 +48,7 @@ class GeminiService:
             return {
                 "status": "offline",
                 "model": "gemini-2.0-flash-exp",
-                "message": "API key not configured"
+                "message": "API key not configured or initialization failed"
             }
         
         try:
@@ -357,7 +357,7 @@ class GeminiService:
           "affected_groups": [],
           "severity_assessment": {{}},
           "mitigation_strategies": [],
-          "fairness_metrics": {},
+          "fairness_metrics": {{}},
           "recommendations": []
         }}
         """

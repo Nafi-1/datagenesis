@@ -1,6 +1,6 @@
 import asyncio
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import uuid
 import logging
@@ -121,7 +121,7 @@ class AgentOrchestrator:
                 "description": description
             }
             
-            synthetic_data = await self._generate_synthetic_data_with_context(generation_context)
+            synthetic_data = await self._generate_synthetic_data_with_context(generation_context, source_data)
             await send_update("data_generation", 90, f"✅ Generated {len(synthetic_data)} synthetic records")
             
             # Phase 7: Quality Validation (90-95%)
@@ -143,7 +143,8 @@ class AgentOrchestrator:
                     "generation_time": datetime.utcnow().isoformat(),
                     "generation_method": "multi_agent_ai",
                     "model_used": "gemini-2.0-flash-exp",
-                    "agents_involved": list(self.agents.keys())
+                    "agents_involved": list(self.agents.keys()),
+                    "gemini_status": "online" if self.gemini_service.is_initialized else "offline"
                 },
                 "quality_score": final_quality_assessment.get('overall_score', 92),
                 "privacy_score": privacy_assessment.get('privacy_score', 95),
@@ -167,7 +168,7 @@ class AgentOrchestrator:
             await send_update("error", -1, f"❌ Generation failed: {str(e)}")
             raise e
     
-    async def _generate_synthetic_data_with_context(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def _generate_synthetic_data_with_context(self, context: Dict[str, Any], source_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Generate synthetic data using comprehensive context from all agents"""
         
         logger.info("🎨 Generating synthetic data with multi-agent context...")
@@ -177,7 +178,7 @@ class AgentOrchestrator:
             schema=context['schema'],
             config=context['config'],
             description=context['description'],
-            source_data=context.get('source_data', [])
+            source_data=source_data
         )
         
         logger.info(f"✅ Generated {len(synthetic_data)} contextual synthetic records")
@@ -233,8 +234,19 @@ class PrivacyAgent(BaseAgent):
         self.status = "analyzing"
         
         try:
-            # Use Gemini for privacy assessment
-            privacy_assessment = await self.gemini_service.assess_privacy_risks(data, config)
+            # Use Gemini for privacy assessment if available
+            if self.gemini_service and self.gemini_service.is_initialized:
+                privacy_assessment = await self.gemini_service.assess_privacy_risks(data, config)
+            else:
+                # Fallback privacy assessment
+                privacy_assessment = {
+                    "privacy_score": 85,
+                    "pii_detected": [],
+                    "sensitive_attributes": [],
+                    "risk_level": "medium",
+                    "compliance_notes": ["Basic privacy assessment - AI analysis unavailable"],
+                    "recommendations": ["Enable Gemini API for advanced privacy analysis"]
+                }
             
             # Enhance with domain-specific privacy rules
             domain = domain_context.get('domain', 'general')
@@ -305,8 +317,18 @@ class DomainExpertAgent(BaseAgent):
         logger.info("🧠 Domain Expert analyzing data structure...")
         
         try:
-            # Use Gemini for comprehensive analysis
-            analysis = await self.gemini_service.analyze_data_comprehensive(data, config)
+            # Use Gemini for comprehensive analysis if available
+            if self.gemini_service and self.gemini_service.is_initialized:
+                analysis = await self.gemini_service.analyze_data_comprehensive(data, config)
+            else:
+                # Fallback analysis
+                analysis = {
+                    "domain": config.get('domain', 'general'),
+                    "confidence": 0.8,
+                    "data_quality": {"score": 85, "issues": [], "recommendations": []},
+                    "schema_inference": {field: "inferred" for field in schema.keys()},
+                    "recommendations": {"generation_strategy": "Standard generation - AI analysis unavailable"}
+                }
             
             # Enhance with domain expertise
             domain = analysis.get('domain', 'general')
@@ -366,8 +388,17 @@ class BiasDetectionAgent(BaseAgent):
         logger.info("⚖️ Bias Detection Agent analyzing for fairness...")
         
         try:
-            # Use Gemini for bias detection
-            bias_analysis = await self.gemini_service.detect_bias_comprehensive(data, config)
+            # Use Gemini for bias detection if available
+            if self.gemini_service and self.gemini_service.is_initialized:
+                bias_analysis = await self.gemini_service.detect_bias_comprehensive(data, config)
+            else:
+                # Fallback bias analysis
+                bias_analysis = {
+                    "bias_score": 88,
+                    "detected_biases": [],
+                    "bias_types": [],
+                    "recommendations": ["Enable Gemini API for advanced bias detection"]
+                }
             
             # Add domain-specific bias checks
             domain = domain_context.get('domain', 'general')

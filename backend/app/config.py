@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
 
 class Settings(BaseSettings):
     # Database
@@ -11,12 +12,12 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     redis_password: Optional[str] = None
     
-    # AI Services
-    gemini_api_key: str = "your_gemini_api_key"
+    # AI Services - Updated to read from correct environment variable
+    gemini_api_key: str = os.getenv('GEMINI_API_KEY', 'your_gemini_api_key')
     google_cloud_project_id: Optional[str] = None
     
     # Vector Database
-    pinecone_api_key: str
+    pinecone_api_key: str = "your_pinecone_api_key"
     pinecone_environment: str = "us-east-1-aws"
     pinecone_index_name: str = "datagenesis-embeddings"
     
