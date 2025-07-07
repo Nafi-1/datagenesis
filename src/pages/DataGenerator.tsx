@@ -24,7 +24,8 @@ import {
   Sparkles,
   AlertCircle,
   Wifi,
-  WifiOff
+  WifiOff,
+  Activity
 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
@@ -40,6 +41,8 @@ const DataGenerator: React.FC = () => {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generationSteps, setGenerationSteps] = useState<string[]>([]);
   const [currentStep, setCurrentStep] = useState<string>('');
+  const [realtimeLogs, setRealtimeLogs] = useState<string[]>([]);
+  const [geminiStatus, setGeminiStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
   const [inputMethod, setInputMethod] = useState<'upload' | 'describe'>('describe');
   const [naturalLanguageDescription, setNaturalLanguageDescription] = useState('');
   const [generatedSchema, setGeneratedSchema] = useState<any>(null);
@@ -70,16 +73,31 @@ const DataGenerator: React.FC = () => {
       setBackendHealthy(health.healthy);
       setLastHealthCheck(new Date());
       
+      // Extract Gemini status from health check
+      if (health.data?.services?.gemini?.status) {
+        setGeminiStatus(health.data.services.gemini.status === 'online' ? 'online' : 'offline');
+      }
+      
       if (health.healthy) {
-        console.log('💚 Backend connected successfully');
+        const geminiStatusFromHealth = health.data?.services?.gemini?.status || 'unknown';
+        addRealtimeLog(`💚 Backend connected | Gemini: ${geminiStatusFromHealth}`);
       } else {
-        console.log('💔 Backend connection failed:', health.error);
+        addRealtimeLog(`💔 Backend failed: ${health.error}`);
+        setGeminiStatus('offline');
       }
     } catch (error) {
-      console.error('💔 Health check error:', error);
+      addRealtimeLog(`💔 Health check error: ${error}`);
       setBackendHealthy(false);
+      setGeminiStatus('offline');
       setLastHealthCheck(new Date());
     }
+  };
+  
+  const addRealtimeLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = `[${timestamp}] ${message}`;
+    setRealtimeLogs(prev => [...prev.slice(-9), logEntry]); // Keep last 10 logs
+    console.log(logEntry); // Also log to console
   };
   
   // Listen for WebSocket updates
@@ -95,14 +113,26 @@ const DataGenerator: React.FC = () => {
       if (data.step && data.message) {
         setCurrentStep(data.message);
         setGenerationSteps(prev => [...prev.slice(-4), `[${data.progress}%] ${data.message}`]);
+        
+        // Add to realtime logs with better formatting
+        if (data.message.includes('Gemini')) {
+          addRealtimeLog(`🤖 GEMINI: ${data.message}`);
+        } else if (data.message.includes('fallback')) {
+          addRealtimeLog(`🏠 FALLBACK: ${data.message}`);
+        } else {
+          addRealtimeLog(`📊 AGENT: ${data.message}`);
+        }
       }
       
       if (data.progress === 100) {
         setIsGenerating(false);
         setGenerationStep(4);
-        toast.success('🎉 Multi-agent AI generation completed!');
+        const method = data.gemini_used ? 'Gemini 2.0 Flash' : 'Local AI';
+        addRealtimeLog(`🎉 COMPLETED: ${method} generation finished!`);
+        toast.success(`🎉 ${method} generation completed!`);
       } else if (data.progress === -1) {
         setIsGenerating(false);
+        addRealtimeLog(`❌ FAILED: ${data.message}`);
         toast.error('❌ Generation failed: ' + data.message);
       }
     }
@@ -369,16 +399,16 @@ const DataGenerator: React.FC = () => {
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
                 <span className="text-purple-300 text-sm font-medium">
-                  {backendHealthy ? '🤖 Gemini 2.0 Flash Processing' : '🏠 Local AI Generation'}
+                  {geminiStatus === 'online' ? '🤖 Gemini 2.0 Flash Processing' : '🏠 Local AI Generation'}
                 </span>
               </div>
               <div className="text-xs text-purple-200">
-                {backendHealthy 
+                {geminiStatus === 'online'
                   ? 'Using Google\'s latest AI model for maximum quality and realism'
                   : 'Using intelligent multi-agent fallback generation'
                 }
               </div>
-              {backendHealthy && (
+              {geminiStatus === 'online' && (
                 <div className="mt-2 text-xs text-green-300">
                   ✨ Advanced JSON parsing • Batch processing • Schema validation
                 </div>
@@ -388,23 +418,23 @@ const DataGenerator: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           {/* Backend Status Indicator */}
-          <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${
-            backendHealthy === null ? 'bg-gray-500/20 border-gray-500/30' :
-            backendHealthy ? 'bg-green-500/20 border-green-500/30' : 'bg-red-500/20 border-red-500/30'
+          <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-sm ${
+            geminiStatus === 'unknown' ? 'bg-gray-500/20 border-gray-500/30' :
+            geminiStatus === 'online' ? 'bg-green-500/20 border-green-500/30' : 'bg-red-500/20 border-red-500/30'
           }`}>
-            {backendHealthy === null ? (
+            {geminiStatus === 'unknown' ? (
               <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-            ) : backendHealthy ? (
+            ) : geminiStatus === 'online' ? (
               <Wifi className="w-4 h-4 text-green-400" />
             ) : (
               <WifiOff className="w-4 h-4 text-red-400" />
             )}
-            <span className={`text-sm ${
-              backendHealthy === null ? 'text-gray-300' :
-              backendHealthy ? 'text-green-300' : 'text-red-300'
+            <span className={`${
+              geminiStatus === 'unknown' ? 'text-gray-300' :
+              geminiStatus === 'online' ? 'text-green-300' : 'text-red-300'
             }`}>
-              {backendHealthy === null ? 'Checking...' :
-               backendHealthy ? 'Backend Online' : 'Backend Offline'}
+              {geminiStatus === 'unknown' ? 'Checking Gemini...' :
+               geminiStatus === 'online' ? 'Gemini 2.0 Flash Online' : 'Gemini Offline'}
             </span>
           </div>
           
@@ -416,7 +446,7 @@ const DataGenerator: React.FC = () => {
       </motion.div>
 
       {/* Backend Status Warning */}
-      {backendHealthy === false && (
+      {geminiStatus === 'offline' && (
         <motion.div
           className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg"
           initial={{ opacity: 0, y: -10 }}
@@ -425,9 +455,9 @@ const DataGenerator: React.FC = () => {
           <div className="flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-yellow-400" />
             <div>
-              <p className="text-yellow-300 font-medium">Backend service offline</p>
+              <p className="text-yellow-300 font-medium">Gemini 2.0 Flash offline</p>
               <p className="text-yellow-200 text-sm">
-                Using local AI generation. For best results, start the backend server.
+                Using intelligent fallback generation. Check your Gemini API key for best results.
                 {lastHealthCheck && ` Last checked: ${lastHealthCheck.toLocaleTimeString()}`}
               </p>
             </div>
@@ -721,15 +751,26 @@ const DataGenerator: React.FC = () => {
             transition={{ duration: 0.5, delay: 0.1 }}
           >
             <h3 className="text-lg font-semibold text-white mb-4">AI Agents</h3>
-            <div className="space-y-3">
+            
+            {/* Real-time Status */}
+            <div className="mb-4 p-3 bg-gray-700/30 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
-                <div className={`w-2 h-2 rounded-full ${
-                  backendHealthy ? 'bg-green-400' : 'bg-yellow-400'
+                <div className={`w-3 h-3 rounded-full ${
+                  geminiStatus === 'online' ? 'bg-green-400 animate-pulse' : 
+                  geminiStatus === 'offline' ? 'bg-red-400' : 'bg-gray-400'
                 }`}></div>
-                <span className="text-xs text-gray-400">
-                  {backendHealthy ? 'Backend Connected' : 'Local Mode'}
+                <span className="text-sm font-medium text-white">
+                  {geminiStatus === 'online' ? '🤖 Gemini 2.0 Flash Ready' :
+                   geminiStatus === 'offline' ? '🏠 Local AI Mode' : '⏳ Checking Status...'}
                 </span>
               </div>
+              <p className="text-xs text-gray-400">
+                {geminiStatus === 'online' ? 'Maximum quality AI generation available' :
+                 geminiStatus === 'offline' ? 'Using intelligent multi-agent fallback' : 'Determining capabilities...'}
+              </p>
+            </div>
+            
+            <div className="space-y-3">
               {[
                 { name: 'Privacy Agent', status: 'Ready', icon: Shield },
                 { name: 'Quality Agent', status: 'Ready', icon: CheckCircle },
@@ -738,18 +779,50 @@ const DataGenerator: React.FC = () => {
               ].map((agent, index) => (
                 <div key={index} className="flex items-center gap-3 p-3 bg-gray-700/30 rounded-lg">
                   <agent.icon className={`w-5 h-5 ${
-                    backendHealthy ? 'text-green-400' : 'text-yellow-400'
+                    geminiStatus === 'online' ? 'text-green-400' : 'text-yellow-400'
                   }`} />
                   <div>
                     <p className="text-white text-sm font-medium">{agent.name}</p>
                     <p className={`text-xs ${
-                      backendHealthy ? 'text-green-400' : 'text-yellow-400'
+                      geminiStatus === 'online' ? 'text-green-400' : 'text-yellow-400'
                     }`}>
-                      {backendHealthy ? agent.status : 'Local Mode'}
+                      {geminiStatus === 'online' ? agent.status : 'Local Mode'}
                     </p>
                   </div>
                 </div>
               ))}
+            </div>
+          </motion.div>
+
+          {/* Real-time Logs Panel */}
+          <motion.div
+            className="p-4 bg-gray-800/50 backdrop-blur-xl border border-gray-700/50 rounded-xl"
+            initial={{ x: 50, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.15 }}
+          >
+            <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-purple-400" />
+              Real-time Logs
+            </h3>
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {realtimeLogs.length > 0 ? (
+                realtimeLogs.map((log, index) => (
+                  <motion.div 
+                    key={index}
+                    className="text-xs p-2 bg-gray-700/30 rounded font-mono text-gray-300 break-words"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {log}
+                  </motion.div>
+                ))
+              ) : (
+                <div className="text-xs text-gray-400 p-2">
+                  No activity yet...
+                </div>
+              )}
             </div>
           </motion.div>
 
@@ -768,7 +841,7 @@ const DataGenerator: React.FC = () => {
                 !selectedDataType ? 'Please select a data type first' :
                 inputMethod === 'describe' && !generatedSchema ? 'Please generate schema first' :
                 inputMethod === 'upload' && !uploadedData ? 'Please upload data first' :
-                'Generate synthetic data'
+                geminiStatus === 'online' ? 'Generate with Gemini 2.0 Flash' : 'Generate with Local AI'
               }
               className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 ${
                 !isGenerationButtonEnabled()
@@ -779,15 +852,26 @@ const DataGenerator: React.FC = () => {
               {isGenerating ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Generating... {generationProgress}%
+                  {geminiStatus === 'online' ? 'Gemini Generating...' : 'AI Generating...'} {generationProgress}%
                 </>
               ) : (
                 <>
                   <Play className="w-5 h-5" />
-                  Generate Data
+                  {geminiStatus === 'online' ? 'Generate with Gemini' : 'Generate with AI'}
                 </>
               )}
             </button>
+            
+            {/* Enhanced Status Info */}
+            <div className="mt-2 text-xs text-center">
+              {geminiStatus === 'online' ? (
+                <span className="text-green-400">🤖 Gemini 2.0 Flash ready for maximum quality</span>
+              ) : geminiStatus === 'offline' ? (
+                <span className="text-yellow-400">🏠 Local AI mode - check Gemini API key</span>
+              ) : (
+                <span className="text-gray-400">⏳ Checking AI capabilities...</span>
+              )}
+            </div>
             
             {/* Debug info for development */}
             {import.meta.env.DEV && (
@@ -799,6 +883,7 @@ const DataGenerator: React.FC = () => {
                 <div>Uploaded Data: {uploadedData ? 'Yes' : 'No'}</div>
                 <div>Schema Fields: {generatedSchema ? Object.keys(generatedSchema.schema || {}).length : 0}</div>
                 <div>Button Enabled: {isGenerationButtonEnabled() ? 'Yes' : 'No'}</div>
+                <div>Gemini: {geminiStatus}</div>
                 <div>Backend: {backendHealthy ? 'Healthy' : 'Offline'}</div>
               </div>
             )}
@@ -956,7 +1041,7 @@ const DataGenerator: React.FC = () => {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Method:</span>
                   <span className={`font-medium ${backendHealthy ? 'text-green-400' : 'text-yellow-400'}`}>
-                    {backendHealthy ? 'Backend' : 'Local'}
+                    {geminiStatus === 'online' ? 'Gemini 2.0 Flash' : 'Local AI'}
                   </span>
                 </div>
               </div>
@@ -984,7 +1069,7 @@ const DataGenerator: React.FC = () => {
               {/* Show generation button status for schema */}
               <div className="mt-3 p-2 bg-green-500/10 border border-green-500/20 rounded-lg">
                 <p className="text-sm text-green-300">
-                  ✅ Schema ready! You can now generate synthetic data.
+                  ✅ Schema ready! {geminiStatus === 'online' ? 'Gemini 2.0 Flash' : 'Local AI'} will generate data.
                 </p>
               </div>
             </motion.div>
@@ -1006,7 +1091,7 @@ const DataGenerator: React.FC = () => {
                 <li>• Making your description more detailed</li>
                 <li>• Selecting a specific domain and data type first</li>
                 <li>• Checking your internet connection</li>
-                {!backendHealthy && <li>• Starting the backend server for better AI features</li>}
+                {geminiStatus === 'offline' && <li>• Checking your Gemini API key configuration</li>}
               </ul>
               <button
                 onClick={handleGenerateSchema}
@@ -1055,7 +1140,7 @@ const DataGenerator: React.FC = () => {
               
               <div className="mt-3 p-2 bg-green-500/10 border border-green-500/20 rounded-lg">
                 <p className="text-sm text-green-300">
-                  ✅ Data uploaded and analyzed! You can now generate synthetic data.
+                  ✅ Data uploaded! {geminiStatus === 'online' ? 'Gemini 2.0 Flash' : 'Local AI'} ready to generate.
                 </p>
               </div>
             </motion.div>

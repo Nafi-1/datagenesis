@@ -52,12 +52,16 @@ export const useWebSocket = () => {
             case 'generation_update':
               // Show more detailed logs for generation updates
               const { step, progress, message: msg } = message.data;
-              if (msg.includes('Gemini')) {
-                console.log('🤖 Gemini AI:', `[${progress}%] ${msg}`);
-              } else if (msg.includes('fallback')) {
-                console.log('🏠 Fallback:', `[${progress}%] ${msg}`);
+              
+              // Enhanced logging with clearer indicators
+              if (msg.includes('Gemini 2.0 Flash')) {
+                console.log(`🤖 GEMINI ACTIVE: [${progress}%] ${msg}`);
+              } else if (msg.includes('fallback') || msg.includes('intelligent')) {
+                console.log(`🏠 LOCAL MODE: [${progress}%] ${msg}`);
+              } else if (msg.includes('batch') || msg.includes('parsing')) {
+                console.log(`⚙️ GEMINI PROCESSING: [${progress}%] ${msg}`);
               } else {
-                console.log('📊 Agent update:', `[${progress}%] ${msg}`);
+                console.log(`📊 AI AGENT: [${progress}%] ${msg}`);
               }
               break;
             case 'agent_status':

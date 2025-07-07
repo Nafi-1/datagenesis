@@ -61,7 +61,13 @@ class AgentOrchestrator:
                 "gemini_status": "online" if self.gemini_service.is_initialized else "offline"
             }
             
-            logger.info(f"🔄 [{progress}%] {step}: {message}")
+            # Enhanced logging to clearly show what's happening
+            if self.gemini_service.is_initialized and 'Gemini' in message:
+                logger.info(f"🤖 GEMINI: [{progress}%] {step}: {message}")
+            elif 'fallback' in message.lower():
+                logger.info(f"🏠 FALLBACK: [{progress}%] {step}: {message}")
+            else:
+                logger.info(f"🔄 [{progress}%] {step}: {message}")
             
             if websocket_manager:
                 try:
@@ -160,7 +166,7 @@ class AgentOrchestrator:
             except Exception as e:
                 logger.error(f"❌ AI generation failed: {str(e)}")
                 if gemini_available:
-                    await send_update("data_generation", 85, "⚠️ Gemini generation failed, using intelligent fallback...")
+                    await send_update("data_generation", 85, "⚠️ Gemini 2.0 Flash encountered an error, using intelligent fallback...")
                 else:
                     await send_update("data_generation", 85, "⚠️ Using intelligent fallback generation...")
                 synthetic_data = self._generate_intelligent_fallback_data(schema, config.get('rowCount', 100))
